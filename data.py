@@ -1,50 +1,58 @@
-from PIL import Image
 import os
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 from torchvision import transforms
-import matplotlib.pyplot as plt
-from kornia.utils import tensor_to_image
+from utils import paired_paths_from_lmdb, imfrombytes, padding, img2tensor
+from file_client import FileClient
+from transforms import paired_random_crop
 
 
-class MyDataset(Dataset):
-    def __init__(self, root_noisy, root_gt, transform=None):
-        self.root_noisy = root_noisy
+class PairedImageDataset(Dataset):
+    def __init__(self, root_lq, root_gt, kwargs):
+        super(PairedImageDataset, self).__init__()
+        self.root_lq = root_lq
         self.root_gt = root_gt
-        self.transform = transform
-        self.imgs_noisy = os.listdir(self.root_noisy)
-        self.imgs_noisy.sort()
-        self.imgs_gt = os.listdir(self.root_gt)
-        self.imgs_gt.sort()
+        self.client_args = {'type': 'lmdb',
+                            'db_paths': [self.root_lq, self.root_gt],
+                            'client_keys': ['lq', 'gt']}
+        self.paths = paired_paths_from_lmdb([self.root_lq, self.root_gt],
+                                            ['lq', 'gt'])
+        self.file_client = None
+        self.kwargs = kwargs
 
     def __len__(self):
-        return len(self.imgs_noisy)
+        return len(self.paths)
 
     def __getitem__(self, idx):
-        input_path = os.path.join(self.root_noisy, self.imgs_noisy[idx])
-        gt_path = os.path.join(self.root_gt, self.imgs_gt[idx])
-        input_img_ = Image.open(input_path).convert('RGB')
-        gt_img_ = Image.open(gt_path).convert('RGB')
+        if self.file_client is None:
+            self.file_client = FileClient(
+                self.client_args.pop('type'), **self.client_args)
+        gt_path = self.paths[idx]['gt_path']
+        lq_path = self.paths[idx]['lq_path']
+        img_bytes = self.file_client.get(gt_path, 'gt')
+        img_gt = imfrombytes(img_bytes, 'color', True)
+        img_bytes = self.file_client.get(lq_path, 'lq')
+        img_lq = imfrombytes(img_bytes, 'color', True)
 
-        if self.transform:
-            input_img_ = self.transform(input_img_)
-            gt_img_ = self.transform(gt_img_)
+        print(img_lq.shape == img_gt.shape)
+        if self.kwargs['phase'] == 'train':
 
-        return input_img_, gt_img_
+            gt_size = self.kwargs['gt_size']
+
+            img_gt, img_lq = padding(img_gt, img_lq, gt_size)
+
+            img_gt, img_lq = paired_random_crop(img_gt, img_lq, gt_size, 1, gt_path)
+
+        img_gt, img_lq = img2tensor([img_gt, img_lq],
+                                    bgr2rgb=True,
+                                    float32=True)
+
+        return {'lq': img_lq, 'gt': img_gt, 'lq_path': lq_path, 'gt_path': gt_path}
+
 
 if __name__ == '__main__':
 
-    root_noisy = os.path.join(os.getcwd(), 'datasets', 'SIDD', 'train', 'input_crops')
-    root_gt = os.path.join(os.getcwd(), 'datasets', 'SIDD', 'train', 'gt_crops')
+    root_lq = os.path.join(os.getcwd(), 'datasets', 'SIDD', 'train', 'input_crops.lmdb')
+    root_gt = os.path.join(os.getcwd(), 'datasets', 'SIDD', 'train', 'gt_crops.lmdb')
     transform = transforms.Compose([transforms.ToTensor()])
-    dataset = MyDataset(root_noisy, root_gt, transform)
-    dataloader = DataLoader(dataset, batch_size=32, shuffle=True, num_workers=1)
-    for data in dataloader:
-        input_img, gt_img = data
-        print(input_img.shape, gt_img.shape)
-        print(input_img.dtype, gt_img.dtype)
-        print(input_img.max(), input_img.min(), input_img.mean())
-        fig, ax = plt.subplots(1, 2, figsize=(10, 10))
-        ax[0].imshow(tensor_to_image(input_img[0]))
-        ax[1].imshow(tensor_to_image(gt_img[0]))
-        plt.show()
-        break
+    dataset = PairedImageDataset(root_lq, root_gt, {'phase': 'train', 'gt_size': 256})
+    print(dataset.__getitem__(1234))
