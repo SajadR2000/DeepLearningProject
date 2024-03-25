@@ -4,10 +4,11 @@ from torchvision import transforms
 from utils import paired_paths_from_lmdb, imfrombytes, padding, img2tensor
 from file_client import FileClient
 from transforms import paired_random_crop
+import torch
 
 
 class PairedImageDataset(Dataset):
-    def __init__(self, root_lq, root_gt, kwargs):
+    def __init__(self, root_lq, root_gt, seed, kwargs):
         super(PairedImageDataset, self).__init__()
         self.root_lq = root_lq
         self.root_gt = root_gt
@@ -18,11 +19,14 @@ class PairedImageDataset(Dataset):
                                             ['lq', 'gt'])
         self.file_client = None
         self.kwargs = kwargs
+        torch.manual_seed(seed)
+        self.indices = torch.randperm(len(self.paths))
 
     def __len__(self):
         return len(self.paths)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx_dummy):
+        idx = self.indices[idx_dummy]
         if self.file_client is None:
             self.file_client = FileClient(
                 self.client_args.pop('type'), **self.client_args)
@@ -33,7 +37,6 @@ class PairedImageDataset(Dataset):
         img_bytes = self.file_client.get(lq_path, 'lq')
         img_lq = imfrombytes(img_bytes, 'color', True)
 
-        print(img_lq.shape == img_gt.shape)
         if self.kwargs['phase'] == 'train':
 
             gt_size = self.kwargs['gt_size']
@@ -53,6 +56,7 @@ if __name__ == '__main__':
 
     root_lq = os.path.join(os.getcwd(), 'datasets', 'SIDD', 'train', 'input_crops.lmdb')
     root_gt = os.path.join(os.getcwd(), 'datasets', 'SIDD', 'train', 'gt_crops.lmdb')
-    transform = transforms.Compose([transforms.ToTensor()])
+    # transform = transforms.Compose([transforms.ToTensor()])
     dataset = PairedImageDataset(root_lq, root_gt, {'phase': 'train', 'gt_size': 256})
     print(dataset.__getitem__(1234))
+
