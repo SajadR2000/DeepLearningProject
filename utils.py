@@ -148,6 +148,6 @@ class PSNRLoss(nn.Module):
         if len(batch_img1.shape) == 3:
             batch_img1 = batch_img1.unsqueeze(0)
             batch_img2 = batch_img2.unsqueeze(0)
-        batch_mse = torch.mean((batch_img1 - batch_img2) ** 2, axis=(1, 2, 3))
+        batch_mse = torch.mean((batch_img1 - batch_img2) ** 2, dim=(1, 2, 3))
         batch_psnr = 20 * torch.log10(self.data_range / torch.max(torch.sqrt(batch_mse), torch.tensor([1e-6])))
         return -batch_psnr.mean()
