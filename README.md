@@ -16,3 +16,8 @@ https://github.com/megvii-research/NAFNet/tree/main
 Baseline Module: Done!
 
 Missing information from the paper: In paper it is only mentioned that they use 36 blocks in total. But they do not mention how many blocks are used in each layer and how many layers there are. We looked into their repo to find the number of layers and number of block in each layer. These are available in their training yml file.
+
+## Trainer
+Uploaded.
+
+train.py script is responsible for training the network.
