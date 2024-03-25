@@ -2,7 +2,7 @@ from os import path as osp
 import numpy as np
 import cv2
 import torch
-
+import torch.nn as nn
 
 def paired_paths_from_lmdb(folders, keys):
     """Generate paired paths from lmdb files.
@@ -137,3 +137,15 @@ def img2tensor(imgs, bgr2rgb=True, float32=True):
         return [_totensor(img, bgr2rgb, float32) for img in imgs]
     else:
         return _totensor(imgs, bgr2rgb, float32)
+
+class PSNRLoss(nn.Module):
+    def __init__(self, data_range=1.0):
+        super(PSNRLoss, self).__init__()
+        self.data_range = data_range
+
+    def forward(self, img1, img2):
+        mse = torch.mean((img1 - img2) ** 2)
+        if mse == 0:
+            return float('inf')
+        psnr_value = 20 * torch.log10(self.data_range / torch.sqrt(mse))
+        return -psnr_value  
