@@ -57,6 +57,6 @@ if __name__ == '__main__':
     root_lq = os.path.join(os.getcwd(), 'datasets', 'SIDD', 'train', 'input_crops.lmdb')
     root_gt = os.path.join(os.getcwd(), 'datasets', 'SIDD', 'train', 'gt_crops.lmdb')
     # transform = transforms.Compose([transforms.ToTensor()])
-    dataset = PairedImageDataset(root_lq, root_gt, {'phase': 'train', 'gt_size': 256})
+    dataset = PairedImageDataset(root_lq, root_gt, 0, {'phase': 'train', 'gt_size': 256})
     print(dataset.__getitem__(1234))
 
