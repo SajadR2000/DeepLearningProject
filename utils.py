@@ -143,9 +143,11 @@ class PSNRLoss(nn.Module):
         super(PSNRLoss, self).__init__()
         self.data_range = data_range
 
-    def forward(self, img1, img2):
-        mse = torch.mean((img1 - img2) ** 2)
-        if mse == 0:
-            return float('inf')
-        psnr_value = 20 * torch.log10(self.data_range / torch.sqrt(mse))
-        return -psnr_value  
+    def forward(self, batch_img1, batch_img2):
+        assert batch_img1.shape == batch_img2.shape
+        if len(batch_img1.shape) == 3:
+            batch_img1 = batch_img1.unsqueeze(0)
+            batch_img2 = batch_img2.unsqueeze(0)
+        batch_mse = torch.mean((batch_img1 - batch_img2) ** 2, axis=(1, 2, 3))
+        batch_psnr = 20 * torch.log10(self.data_range / torch.sqrt(batch_mse))
+        return -batch_psnr.mean()
