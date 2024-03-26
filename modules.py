@@ -25,8 +25,8 @@ class BaselineBlock(nn.Module):
         super(BaselineBlock, self).__init__()
         self.in_channels = in_channels
         h, w = in_shape
-        self.alpha = torch.nn.Parameter(torch.zeros(1))
-        self.beta = torch.nn.Parameter(torch.zeros(1))
+        self.alpha = torch.nn.Parameter(torch.zeros_like(in_channels))
+        self.beta = torch.nn.Parameter(torch.zeros_like(in_channels))
         # self.h = h
         # self.w = w
         # First skip-connection hidden width
