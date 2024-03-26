@@ -27,13 +27,14 @@ class BaselineBlock(nn.Module):
         h, w = in_shape
         self.alpha = torch.nn.Conv2d(in_channels,in_channels,kernel_size=1,groups=in_channels,stride=1,bias=False,padding='same')
         self.beta = torch.nn.Conv2d(in_channels,in_channels,kernel_size=1,groups=in_channels,stride=1,bias=False,padding='same')
+        self.alpha.weight = torch.nn.Parameter(torch.ones(in_channels,require_grad = True).reshape(self.alpha.weight.shape))
+        self.beta.weight = torch.nn.Parameter(torch.ones(in_channels,require_grad = True).reshape(self.beta.weight.shape))
         # self.h = h
         # self.w = w
         # First skip-connection hidden width
         self.middle_channels1 = middle_channels[0]
         # Second skip-connection hidden width
         self.middle_channels2 = middle_channels[1]
-
         self.block_part1 = nn.Sequential(*[
             nn.LayerNorm([in_channels, h, w]),
             nn.Conv2d(in_channels, self.middle_channels1, kernel_size=1, stride=1, padding='same'),
