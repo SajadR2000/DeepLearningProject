@@ -1,6 +1,7 @@
 import torch.nn as nn
 from data import PairedImageDataset
 import os
+import torch
 from torch.utils.data import Dataset, DataLoader
 
 
