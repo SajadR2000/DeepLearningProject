@@ -2,7 +2,7 @@ import torch.nn as nn
 from data import PairedImageDataset
 import os
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 
 
 class ChannelAttention(nn.Module):
@@ -10,9 +10,9 @@ class ChannelAttention(nn.Module):
         super(ChannelAttention, self).__init__()
         self.excitation = nn.Sequential(*[
             nn.AdaptiveAvgPool2d(output_size=1),
-            nn.Conv2d(input_channels, middle_channels, kernel_size=1, padding='same'),
+            nn.Conv2d(input_channels, middle_channels, kernel_size=1, padding=0),
             nn.ReLU(),
-            nn.Conv2d(middle_channels, input_channels, kernel_size=1, padding='same'),
+            nn.Conv2d(middle_channels, input_channels, kernel_size=1, padding=0),
             nn.Sigmoid()
         ])
 
@@ -21,48 +21,72 @@ class ChannelAttention(nn.Module):
         return x * y
 
 
+class Permute(nn.Module):
+    def __init__(self, input_data_format="channels_last"):
+        super(Permute, self).__init__()
+        self.input_data_format = input_data_format
+
+    def forward(self, x):
+        if self.input_data_format == "channels_last":
+            return x.permute(0, 3, 1, 2)
+        else:
+            return x.permute(0, 2, 3, 1)
+
+
+class MyLayerNorm(nn.Module):
+    def __init__(self, in_channels):
+        super(MyLayerNorm, self).__init__()
+        self.layer_norm = nn.Sequential(*[
+            Permute(input_data_format="channels_first"),
+            nn.LayerNorm([in_channels]),
+            Permute(input_data_format="channels_last")
+        ])
+
+    def forward(self, x):
+        return self.layer_norm(x)
+
+
 class BaselineBlock(nn.Module):
     def __init__(self, in_channels, middle_channels, in_shape):
         super(BaselineBlock, self).__init__()
         self.in_channels = in_channels
         h, w = in_shape
-        self.alpha = nn.Conv2d(in_channels, in_channels, kernel_size=1, groups=in_channels, stride=1, bias=False, padding='same')
-        self.beta = nn.Conv2d(in_channels, in_channels, kernel_size=1, groups=in_channels, stride=1, bias=False, padding='same')
-        self.alpha.weight = nn.Parameter(torch.ones(in_channels, requires_grad=True).reshape(self.alpha.weight.shape) * 1e-6)
-        self.beta.weight = nn.Parameter(torch.ones(in_channels, requires_grad=True).reshape(self.beta.weight.shape) * 1e-6)
-        # self.h = h
-        # self.w = w
         # First skip-connection hidden width
         self.middle_channels1 = middle_channels[0]
         # Second skip-connection hidden width
         self.middle_channels2 = middle_channels[1]
         self.block_part1 = nn.Sequential(*[
-            nn.LayerNorm([in_channels, h, w]),
-            nn.Conv2d(in_channels, self.middle_channels1, kernel_size=1, stride=1, padding='same'),
-            nn.Conv2d(self.middle_channels1, self.middle_channels1, kernel_size=3, stride=1, padding='same',
+            MyLayerNorm(self.in_channels),
+            nn.Conv2d(in_channels, self.middle_channels1, kernel_size=1, stride=1, padding=0),
+            nn.Conv2d(self.middle_channels1, self.middle_channels1, kernel_size=3, stride=1, padding=1,
                       groups=self.middle_channels1),  # Depth-wise conv
             nn.GELU(),
             ChannelAttention(self.middle_channels1, self.middle_channels1 // 2),  # r=2 (Appendix A.2)
-            nn.Conv2d(self.middle_channels1, in_channels, kernel_size=1, stride=1, padding='same')
+            nn.Conv2d(self.middle_channels1, in_channels, kernel_size=1, stride=1, padding=0)
         ])
 
         self.block_part2 = nn.Sequential(*[
-            nn.LayerNorm([in_channels, h, w]),
-            nn.Conv2d(in_channels, self.middle_channels2, kernel_size=1, stride=1, padding='same'),
+            MyLayerNorm(self.in_channels),
+            nn.Conv2d(in_channels, self.middle_channels2, kernel_size=1, stride=1, padding=0),
             nn.GELU(),
-            nn.Conv2d(self.middle_channels2, in_channels, kernel_size=1, stride=1, padding='same')
+            nn.Conv2d(self.middle_channels2, in_channels, kernel_size=1, stride=1, padding=0)
         ])
 
+        self.alpha = torch.ones((in_channels, 1, 1), dtype=torch.float32) * 1e-6
+        self.alpha = nn.Parameter(self.alpha, requires_grad=True)
+        self.beta = torch.ones((in_channels, 1, 1), dtype=torch.float32) * 1e-6
+        self.beta = nn.Parameter(self.beta, requires_grad=True)
+
     def forward(self, x):
-        x = self.alpha(self.block_part1(x))  + x
-        x = self.beta(self.block_part2(x)) + x
+        x = self.alpha * self.block_part1(x) + x
+        x = self.beta * self.block_part2(x) + x
         return x
 
 
 class DownsampleBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(DownsampleBlock, self).__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=2, stride=2, padding='valid')
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=2, stride=2, padding=0)
 
     def forward(self, x):
         return self.conv(x)
@@ -138,7 +162,7 @@ class Baseline(nn.Module):
         assert len(enc_blocks_per_layer) == 4
         h, w = in_shape
 
-        self.increase_width = nn.Conv2d(in_channels, width, kernel_size=1, stride=1, padding='same')
+        self.increase_width = nn.Conv2d(in_channels, width, kernel_size=1, stride=1, padding=0)
         self.enc_0 = BaselineEncoder(width, middle_channels, width * 2, in_shape, enc_blocks_per_layer[0])
 
         width = width * 2
@@ -194,7 +218,7 @@ class Baseline(nn.Module):
 
         width = width // 2
 
-        self.decrease_width = nn.Conv2d(width, in_channels, kernel_size=1, stride=1, padding='same')
+        self.decrease_width = nn.Conv2d(width, in_channels, kernel_size=1, stride=1, padding=0)
 
     def forward(self, x):
         x = self.increase_width(x)
@@ -214,7 +238,7 @@ if __name__ == "__main__":
     CROP_SIZE = 256
     root_lq = os.path.join(os.getcwd(), 'datasets', 'SIDD', 'train', 'input_crops.lmdb')
     root_gt = os.path.join(os.getcwd(), 'datasets', 'SIDD', 'train', 'gt_crops.lmdb')
-    dataset = PairedImageDataset(root_lq, root_gt, {'phase': 'train', 'gt_size': CROP_SIZE})
+    dataset = PairedImageDataset(root_lq, root_gt, 0, {'phase': 'train', 'gt_size': CROP_SIZE})
     dataloader = DataLoader(dataset, batch_size=32, shuffle=True, num_workers=1)
 
     # net = BaselineBlock(3, [3, 6], (CROP_SIZE, CROP_SIZE))
@@ -228,22 +252,37 @@ if __name__ == "__main__":
     #     print(name, layer)
 
     params = {'in_channels': 3,
-              'width': 16,
-              'middle_channels': [3, 6],
-              'in_shape': (CROP_SIZE, CROP_SIZE),
-              'enc_blocks_per_layer': [1, 1, 4, 16],
-              'dec_blocks_per_layer': [2, 5, 4, 3],
-              'middle_blocks': 5
-              }
+                  'width': 32,
+                  'in_shape': (CROP_SIZE, CROP_SIZE),
+                  'middle_channels': [3, 6],
+                  'enc_blocks_per_layer': [2, 2, 4, 8],
+                  'dec_blocks_per_layer': [2, 2, 2, 2],
+                  'middle_blocks': 12
+                  }
 
-    net = Baseline(**params)
+    net = Baseline(**params).to('mps')
+    # net = BaselineBlock(3, [3, 6], (CROP_SIZE, CROP_SIZE))
+    # def named_hook(name):
+    #     def hook(module, input, output):
+    #         print(name)
+    #         print(input)
+    #         print(type(input))
+    #         print(output)
+    #         print(type(output))
+    #         print(input[0].shape, output.shape)
+    #     return hook
+
+    # for name, child in net.named_children():
+    #     child.register_forward_hook(named_hook(name))
 
     for data in dataloader:
-        img_lq = data['lq']
+        img_lq = data['lq'].to('mps')
         # enc_out = enc_net(img_lq)
         # dec_out = dec_net(enc_out)
         # print(enc_out.shape, dec_out.shape, img_lq.shape)
+        from time import time
+        t = time()
         out = net(img_lq)
-        print(out.shape, img_lq.shape)
-        break
+        print(time()-t)
+        # print(out.shape, img_lq.shape)
 
