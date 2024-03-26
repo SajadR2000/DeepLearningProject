@@ -4,6 +4,7 @@ import cv2
 import torch
 import torch.nn as nn
 
+
 def paired_paths_from_lmdb(folders, keys):
     """Generate paired paths from lmdb files.
 
@@ -138,16 +139,19 @@ def img2tensor(imgs, bgr2rgb=True, float32=True):
     else:
         return _totensor(imgs, bgr2rgb, float32)
 
+
 class PSNRLoss(nn.Module):
     def __init__(self, data_range=1.0):
         super(PSNRLoss, self).__init__()
         self.data_range = data_range
 
     def forward(self, batch_img1, batch_img2):
+        device_ = batch_img1.device
         assert batch_img1.shape == batch_img2.shape
         if len(batch_img1.shape) == 3:
             batch_img1 = batch_img1.unsqueeze(0)
             batch_img2 = batch_img2.unsqueeze(0)
         batch_mse = torch.mean((batch_img1 - batch_img2) ** 2, dim=(1, 2, 3))
-        batch_psnr = 20 * torch.log10(self.data_range / torch.max(torch.sqrt(batch_mse), torch.tensor([1e-6])))
+        batch_psnr = 20 * torch.log10(self.data_range / torch.max(torch.sqrt(batch_mse), torch.tensor([1e-6],
+                                                                                                      device=device_)))
         return -batch_psnr.mean()
