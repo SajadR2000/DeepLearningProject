@@ -28,8 +28,8 @@ class BaselineBlock(nn.Module):
         h, w = in_shape
         self.alpha = nn.Conv2d(in_channels, in_channels, kernel_size=1, groups=in_channels, stride=1, bias=False, padding='same')
         self.beta = nn.Conv2d(in_channels, in_channels, kernel_size=1, groups=in_channels, stride=1, bias=False, padding='same')
-        self.alpha.weight = nn.Parameter(torch.ones(in_channels, require_grad=True).reshape(self.alpha.weight.shape) * 1e-6)
-        self.beta.weight = nn.Parameter(torch.ones(in_channels, require_grad=True).reshape(self.beta.weight.shape) * 1e-6)
+        self.alpha.weight = nn.Parameter(torch.ones(in_channels, requires_grad=True).reshape(self.alpha.weight.shape) * 1e-6)
+        self.beta.weight = nn.Parameter(torch.ones(in_channels, requires_grad=True).reshape(self.beta.weight.shape) * 1e-6)
         # self.h = h
         # self.w = w
         # First skip-connection hidden width
