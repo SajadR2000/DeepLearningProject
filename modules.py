@@ -25,10 +25,10 @@ class BaselineBlock(nn.Module):
         super(BaselineBlock, self).__init__()
         self.in_channels = in_channels
         h, w = in_shape
-        self.alpha = torch.nn.Conv2d(in_channels,in_channels,kernel_size=1,groups=in_channels,stride=1,bias=False,padding='same')
-        self.beta = torch.nn.Conv2d(in_channels,in_channels,kernel_size=1,groups=in_channels,stride=1,bias=False,padding='same')
-        self.alpha.weight = torch.nn.Parameter(torch.ones(in_channels,require_grad = True).reshape(self.alpha.weight.shape))
-        self.beta.weight = torch.nn.Parameter(torch.ones(in_channels,require_grad = True).reshape(self.beta.weight.shape))
+        self.alpha = nn.Conv2d(in_channels, in_channels, kernel_size=1, groups=in_channels, stride=1, bias=False, padding='same')
+        self.beta = nn.Conv2d(in_channels, in_channels, kernel_size=1, groups=in_channels, stride=1, bias=False, padding='same')
+        self.alpha.weight = nn.Parameter(torch.ones(in_channels, require_grad=True).reshape(self.alpha.weight.shape) * 1e-6)
+        self.beta.weight = nn.Parameter(torch.ones(in_channels, require_grad=True).reshape(self.beta.weight.shape) * 1e-6)
         # self.h = h
         # self.w = w
         # First skip-connection hidden width
@@ -53,8 +53,8 @@ class BaselineBlock(nn.Module):
         ])
 
     def forward(self, x):
-        x = alpha * self.block_part1(x) + x
-        x = beta * self.block_part2(x) + x
+        x = self.alpha(self.block_part1(x))  + x
+        x = self.beta(self.block_part2(x)) + x
         return x
 
 
