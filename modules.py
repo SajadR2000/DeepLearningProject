@@ -81,6 +81,43 @@ class BaselineBlock(nn.Module):
         x = self.alpha * self.block_part1(x) + x
         x = self.beta * self.block_part2(x) + x
         return x
+    
+class NAFNetBlock(nn.Module):
+    def __init__(self, in_channels, middle_channels, in_shape):
+        super(NAFNetBlock, self).__init__()
+        self.in_channels = in_channels
+        h, w = in_shape
+        # First skip-connection hidden width
+        self.middle_channels1 = middle_channels[0]
+        # Second skip-connection hidden width
+        self.middle_channels2 = middle_channels[1]
+        self.block_part1 = nn.Sequential(*[
+            MyLayerNorm(self.in_channels),
+            nn.Conv2d(in_channels, self.middle_channels1, kernel_size=1, stride=1, padding=0),
+            nn.Conv2d(self.middle_channels1, self.middle_channels1, kernel_size=3, stride=1, padding=1,
+                      groups=self.middle_channels1),  # Depth-wise conv
+            SimpleGate(self.middle_channels1,self.middle_channels1),
+            SimplifiedChannelAttention(self.middle_channels1, self.middle_channels1 // 2),  # r=2 (Appendix A.2)
+            nn.Conv2d(self.middle_channels1, in_channels, kernel_size=1, stride=1, padding=0)
+        ])
+
+        self.block_part2 = nn.Sequential(*[
+            MyLayerNorm(self.in_channels),
+            nn.Conv2d(in_channels, self.middle_channels2, kernel_size=1, stride=1, padding=0),
+            SimpleGate(self.middle_channels2,self.middle_channels2),
+            nn.Conv2d(self.middle_channels2, in_channels, kernel_size=1, stride=1, padding=0)
+        ])
+
+        self.alpha = torch.ones((in_channels, 1, 1), dtype=torch.float32) * 1e-6
+        self.alpha = nn.Parameter(self.alpha, requires_grad=True)
+        self.beta = torch.ones((in_channels, 1, 1), dtype=torch.float32) * 1e-6
+        self.beta = nn.Parameter(self.beta, requires_grad=True)
+
+    def forward(self, x):
+        x = self.alpha * self.block_part1(x) + x
+        x = self.beta * self.block_part2(x) + x
+        return x
+
 
 
 class DownsampleBlock(nn.Module):
@@ -91,6 +128,26 @@ class DownsampleBlock(nn.Module):
     def forward(self, x):
         return self.conv(x)
 
+class SimpleGate(nn.Module):
+    def __init__(self,X,Y):
+        super(SimpleGate, self).__init__()
+        assert X.shape == Y.shape
+    def forward(self, X, Y):
+        result = X * Y
+        return result
+
+class SimplifiedChannelAttention(nn.Module):
+    def __init__(self, input_channels, middle_channels):
+        super(SimplifiedChannelAttention, self).__init__()
+        self.excitation = nn.Sequential(*[
+            nn.AdaptiveAvgPool2d(output_size=1),
+            nn.Conv2d(input_channels, middle_channels, kernel_size=1, padding=0)
+        ])
+
+    def forward(self, x):
+        y = self.excitation(x)
+        return x * y
+    
 
 class UpsampleBlock(nn.Module):
     def __init__(self, in_channels):
@@ -121,6 +178,23 @@ class BaselineEncoder(nn.Module):
 
     def forward(self, x):
         return self.encoder(x)
+    
+class NAFNetEncoder(nn.Module):
+    def __init__(self, in_channels, middle_channels, out_channels, in_shape, n_blocks):
+        super(NAFNetEncoder, self).__init__()
+
+        if n_blocks > 0:
+            self.encoder = nn.Sequential(*[
+                NAFNetBlock(in_channels, middle_channels, in_shape) for _ in range(n_blocks)
+            ])
+
+            self.encoder.append(DownsampleBlock(in_channels, out_channels))
+
+        else:
+            self.encoder = nn.Identity()
+
+    def forward(self, x):
+        return self.encoder(x)
 
 
 class BaselineMiddle(nn.Module):
@@ -130,6 +204,21 @@ class BaselineMiddle(nn.Module):
         if n_blocks > 0:
             self.encoder = nn.Sequential(*[
                 BaselineBlock(in_channels, middle_channels, in_shape) for _ in range(n_blocks)
+            ])
+
+        else:
+            self.encoder = nn.Identity()
+
+    def forward(self, x):
+        return self.encoder(x)
+
+class NAFNetMiddle(nn.Module):
+    def __init__(self, in_channels, middle_channels, in_shape, n_blocks):
+        super(NAFNetMiddle, self).__init__()
+
+        if n_blocks > 0:
+            self.encoder = nn.Sequential(*[
+                NAFNetBlock(in_channels, middle_channels, in_shape) for _ in range(n_blocks)
             ])
 
         else:
@@ -153,7 +242,100 @@ class BaselineDecoder(nn.Module):
 
     def forward(self, x):
         return self.decoder(x)
+    
+class NAFNetDecoder(nn.Module):
+    def __init__(self, in_channels, middle_channels, in_shape, n_blocks):
+        super(NAFNetDecoder, self).__init__()
+        if n_blocks > 0:
+            self.decoder = nn.Sequential(*[
+                NAFNetBlock(in_channels, middle_channels, in_shape) for _ in range(n_blocks)
+            ])
 
+            self.decoder.append(UpsampleBlock(in_channels))
+        else:
+            self.decoder = nn.Identity()
+
+    def forward(self, x):
+        return self.decoder(x)
+
+
+class NAFNet(nn.Module):
+    def __init__(self, in_channels, width, middle_channels, in_shape, enc_blocks_per_layer, dec_blocks_per_layer, middle_blocks):
+        super(NAFNet, self).__init__()
+        assert len(enc_blocks_per_layer) == len(dec_blocks_per_layer)
+        assert len(enc_blocks_per_layer) == 4
+        h, w = in_shape
+
+        self.increase_width = nn.Conv2d(in_channels, width, kernel_size=1, stride=1, padding=0)
+        self.enc_0 = NAFNetEncoder(width, middle_channels, width * 2, in_shape, enc_blocks_per_layer[0])
+
+        width = width * 2
+        h = h // 2
+        w = w // 2
+        in_shape = (h, w)
+
+        self.enc_1 = NAFNetEncoder(width, middle_channels, width * 2, in_shape, enc_blocks_per_layer[1])
+
+        width = width * 2
+        h = h // 2
+        w = w // 2
+        in_shape = (h, w)
+
+        self.enc_2 = BaselineEncoder(width, middle_channels, width * 2, in_shape, enc_blocks_per_layer[2])
+
+        width = width * 2
+        h = h // 2
+        w = w // 2
+        in_shape = (h, w)
+
+        self.enc_3 = BaselineEncoder(width, middle_channels, width * 2, in_shape, enc_blocks_per_layer[3])
+
+        width = width * 2
+        h = h // 2
+        w = w // 2
+        in_shape = (h, w)
+
+        self.middle_blk = NAFNetMiddle(width, middle_channels, in_shape, middle_blocks)
+
+        self.dec_0 = NAFNetDecoder(width, middle_channels, in_shape, dec_blocks_per_layer[0])
+
+        width = width // 2
+        h = h * 2
+        w = w * 2
+        in_shape = (h, w)
+
+        self.dec_1 = NAFNetDecoder(width, middle_channels, in_shape, dec_blocks_per_layer[1])
+
+        width = width // 2
+        h = h * 2
+        w = w * 2
+        in_shape = (h, w)
+
+        self.dec_2 = NAFNetDecoder(width, middle_channels, in_shape, dec_blocks_per_layer[2])
+
+        width = width // 2
+        h = h * 2
+        w = w * 2
+        in_shape = (h, w)
+
+        self.dec_3 = NAFNetDecoder(width, middle_channels, in_shape, dec_blocks_per_layer[3])
+
+        width = width // 2
+
+        self.decrease_width = nn.Conv2d(width, in_channels, kernel_size=1, stride=1, padding=0)
+
+    def forward(self, x):
+        x = self.increase_width(x)
+        enc0 = self.enc_0(x)
+        enc1 = self.enc_1(enc0)
+        enc2 = self.enc_2(enc1)
+        enc3 = self.enc_3(enc2)
+        middle = self.middle_blk(enc3)
+        dec0 = self.dec_0(middle + enc3)
+        dec1 = self.dec_1(dec0 + enc2)
+        dec2 = self.dec_2(dec1 + enc1)
+        dec3 = self.dec_3(dec2 + enc0)
+        return self.decrease_width(dec3)
 
 class Baseline(nn.Module):
     def __init__(self, in_channels, width, middle_channels, in_shape, enc_blocks_per_layer, dec_blocks_per_layer, middle_blocks):
