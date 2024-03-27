@@ -98,7 +98,7 @@ class NAFNetBlock(nn.Module):
                       groups=self.middle_channels1),  # Depth-wise conv
             SimpleGate(),
             SimplifiedChannelAttention(self.middle_channels1 // 2, self.middle_channels1 // 2),  # r=2 (Appendix A.2)
-            nn.Conv2d(self.middle_channels1, in_channels, kernel_size=1, stride=1, padding=0)
+            nn.Conv2d(self.middle_channels1 // 2, in_channels, kernel_size=1, stride=1, padding=0)
         ])
 
         self.block_part2 = nn.Sequential(*[
