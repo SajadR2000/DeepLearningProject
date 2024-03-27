@@ -96,16 +96,16 @@ class NAFNetBlock(nn.Module):
             nn.Conv2d(in_channels, self.middle_channels1, kernel_size=1, stride=1, padding=0),
             nn.Conv2d(self.middle_channels1, self.middle_channels1, kernel_size=3, stride=1, padding=1,
                       groups=self.middle_channels1),  # Depth-wise conv
-            SimpleGate(self.middle_channels1,self.middle_channels1),
-            SimplifiedChannelAttention(self.middle_channels1, self.middle_channels1 // 2),  # r=2 (Appendix A.2)
+            SimpleGate(),
+            SimplifiedChannelAttention(self.middle_channels1 // 2, self.middle_channels1 // 2),  # r=2 (Appendix A.2)
             nn.Conv2d(self.middle_channels1, in_channels, kernel_size=1, stride=1, padding=0)
         ])
 
         self.block_part2 = nn.Sequential(*[
             MyLayerNorm(self.in_channels),
             nn.Conv2d(in_channels, self.middle_channels2, kernel_size=1, stride=1, padding=0),
-            SimpleGate(self.middle_channels2,self.middle_channels2),
-            nn.Conv2d(self.middle_channels2, in_channels, kernel_size=1, stride=1, padding=0)
+            SimpleGate(),
+            nn.Conv2d(self.middle_channels2 // 2, in_channels, kernel_size=1, stride=1, padding=0)
         ])
 
         self.alpha = torch.ones((in_channels, 1, 1), dtype=torch.float32) * 1e-6
@@ -129,11 +129,10 @@ class DownsampleBlock(nn.Module):
         return self.conv(x)
 
 class SimpleGate(nn.Module):
-    def __init__(self,X,Y):
+    def __init__(self):
         super(SimpleGate, self).__init__()
-        assert X.shape == Y.shape
-    def forward(self, X, Y):
-        result = X * Y
+    def forward(self, x):
+        result = x[:, :x.shape[1]//2, :] * x[:, x.shape[1]//2:, :]
         return result
 
 class SimplifiedChannelAttention(nn.Module):
