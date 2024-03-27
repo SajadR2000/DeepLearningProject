@@ -64,6 +64,7 @@ class Trainer:
 
     def train_loop(self, n_epochs, resume):
         if resume:
+            print("Resuming training")
             self.load_model()
             self.load_logs()
 
@@ -72,12 +73,13 @@ class Trainer:
             print('-' * 10)
             train_loader, val_loader = self.get_dataloaders(epoch)
             if self.done:
-                print("Done!")
                 break
             self.epoch_train(epoch, train_loader)
             self.epoch_val(epoch, val_loader)
             self.save_model(epoch)
             self.logger()
+
+        print("Done!")
 
     def get_dataloaders(self, epoch):
         train_dataset = PairedImageDataset(self.train_dataset_params['root_lq'],
@@ -153,6 +155,7 @@ class Trainer:
 
     def load_model(self):
         filename = sorted(os.listdir(self.model_dir))[-1]
+        print(f"Loading model {filename}")
         file_dir = os.path.join(self.model_dir, filename)
         checkpoint = torch.load(file_dir)
         self.model.load_state_dict(checkpoint['state_dict'])
@@ -247,14 +250,14 @@ if __name__ == '__main__':
                       scheduler,
                       train_dataset_params,
                       val_dataset_params,
-                      10,
-                      10,
+                      1,
+                      1,
                       N_ITERATIONS,
                       model_dir,
                       log_dir)
     # print(torch.backends.mps.is_available())
     # trainer.train_loop(N_EPOCHS, False)
-    trainer.train_loop(1, False)
+    trainer.train_loop(5, True)
     # for name, param in model.named_parameters():
     #     print(name, param)
 
