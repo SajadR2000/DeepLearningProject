@@ -1,0 +1,28 @@
+conda install pip
+pip install -r requirements.txt
+gdown 1UHjWZzLPGweA9ZczmV8lFSRcIxqiOVJw
+gdown 1gZx_K2vmiHalRNOb1aj93KuUQ2guOlLp
+mkdir datasets
+mv SIDD-val-lmdb.zip datasets
+cd datasets
+unzip SIDD-val-lmdb.zip
+cd SIDD
+mkdir train
+mkdir Data
+cd ..
+cd ..
+mv train.zip datasets/SIDD/Data/train.zip
+cd datasets/SIDD/Data
+unzip train.zip
+rm train.zip
+cd ..
+cd ..
+rm SIDD-val-lmdb.zip
+cd ..
+cd datasets/SIDD/Data
+rm .DS_Store
+cd ..
+cd ..
+cd ..
+python sidd.py
+python train_nafnet.py
