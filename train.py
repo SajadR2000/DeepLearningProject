@@ -121,6 +121,7 @@ class Trainer:
             output = self.model(img_lq)
             loss = self.criterion(output, img_gt)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.01)
             self.optimizer.step()
             self.scheduler.step()
             running_loss.append(loss.cpu().detach().numpy())
