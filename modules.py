@@ -280,14 +280,14 @@ class NAFNet(nn.Module):
         w = w // 2
         in_shape = (h, w)
 
-        self.enc_2 = BaselineEncoder(width, middle_channels, width * 2, in_shape, enc_blocks_per_layer[2])
+        self.enc_2 = NAFNetEncoder(width, middle_channels, width * 2, in_shape, enc_blocks_per_layer[2])
 
         width = width * 2
         h = h // 2
         w = w // 2
         in_shape = (h, w)
 
-        self.enc_3 = BaselineEncoder(width, middle_channels, width * 2, in_shape, enc_blocks_per_layer[3])
+        self.enc_3 = NAFNetEncoder(width, middle_channels, width * 2, in_shape, enc_blocks_per_layer[3])
 
         width = width * 2
         h = h // 2
