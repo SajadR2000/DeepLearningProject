@@ -46,11 +46,11 @@ if __name__ == '__main__':
                   }
 
     optimizer_params = {'lr': 1e-3, 'betas': (0.9, 0.9), 'weight_decay': 0}
-    scheduler_params = {'T_max': N_ITERATIONS, 'eta_min': 1e-6}
+    scheduler_params = {'T_max': N_ITERATIONS, 'eta_min': 1e-7}
 
     model = NAFNet(**net_params)
     criterion = PSNRLoss(data_range=1.0)
-    optimizer = torch.optim.Adam(model.parameters(), **optimizer_params)
+    optimizer = torch.optim.AdamW(model.parameters(), **optimizer_params)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, **scheduler_params)
 
     trainer = Trainer(model,
