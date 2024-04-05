@@ -74,5 +74,12 @@ if __name__ == '__main__':
         for filename in os.listdir(model_dir):
             if filename.endswith(".pth"):
                 resume = True
-    trainer.epoch_val(N_EPOCHS, val_dataset)
-    # trainer.train_loop(2, True)vbnvbnbbnvbnvbnbvnbvnbbnvbnbvnbvnbvnbvnbvnbvnvbnvbbbbvnnvhffgdfgdfgdfgdfgfdgdfgdfgdgdfgdfgfdgfdgfdgfdg
+    # print(val_dataset[0]['lq'].shape)
+    # raise
+    val_loader = DataLoader(val_dataset,
+                                batch_size=BATCH_SIZE,
+                                shuffle=False,
+                                num_workers=6
+                                )
+    trainer.epoch_val(N_EPOCHS, val_loader)
+    # trainer.train_loop(2, True)
