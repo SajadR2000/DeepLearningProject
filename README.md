@@ -33,4 +33,4 @@ To train NAFNet model simply run train_nafnet.py
 To test NAFNet model simply run test_nafnet.py
 
 ## Instruction Summary:
-You can follow the instruction.txt file for a detailed set of instructions on preparing the data and training.
+You can follow the instruction.txt file for a detailed set of instructions on preparing the data and training. However, before running it make sure to copy the basicsr directory from the paper repo into this directory.
