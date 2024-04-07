@@ -153,25 +153,6 @@ class Trainer:
             epoch_loss = str(np.mean(running_loss).item())
             self.loss_vals["val"].append(epoch_loss)
             self.loss_vals["val_epochs"].append(epoch)
-    def epoch_test(self, epoch, val_loader):
-        self.load_model()
-        if epoch % self.val_freq == 0:
-            t_start = time()
-            self.model.eval()
-            running_loss = []
-            with torch.no_grad():
-                for data in val_loader:
-                    img_lq, img_gt = data['lq'].to(self.device), data['gt'].to(self.device)
-                    output = self.model(img_lq)
-                    loss = self.criterion(output, img_gt)
-                    running_loss.append(loss.cpu().detach().numpy())
-                    if(len(running_loss)>15):
-                        break
-            out = {}
-            out['gt'] = img_gt.cpu().squeeze().permute(1, 2, 0).numpy()
-            out['lq'] = img_lq.cpu().squeeze().permute(1, 2, 0).numpy()
-            out['dn'] = output.cpu().squeeze().permute(1, 2, 0).numpy()
-            return out
 
     def load_model(self):
         filename = sorted(os.listdir(self.model_dir))[-1]
@@ -280,5 +261,3 @@ if __name__ == '__main__':
     trainer.train_loop(5, True)
     # for name, param in model.named_parameters():
     #     print(name, param)
-
-    # print(sum(p.numel() for p in model.parameters()))
