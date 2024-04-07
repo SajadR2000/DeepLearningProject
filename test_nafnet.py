@@ -8,29 +8,40 @@ from utils import PSNRLoss
 from tqdm import tqdm
 import json
 import cv2
-from psnr_ssim import calculate_psnr
 from time import time
 import matplotlib.pyplot as plt
-from train import Trainer
 
+
+def test_image(model, criterion, img_lq, img_gt=None, device=None):
+    if device is None:
+        if torch.cuda.is_available():
+            device = 'cuda'
+        elif torch.backends.mps.is_available():
+            device = 'mps'
+        else:
+            device = 'cpu'
+    model = model.to(device)
+    img_lq = img_lq.to(device)
+    img_gt = img_gt.to(device)
+    model.eval()
+    running_loss = []
+    with torch.no_grad():
+        output = model(img_lq).clamp(0., 1.)
+        out = {}
+        out['lq'] = img_lq.cpu().squeeze().permute(1, 2, 0).numpy()
+        out['dn'] = output.cpu().squeeze().permute(1, 2, 0).numpy()
+        if img_gt is not None:
+            out['gt'] = img_gt.cpu().squeeze().permute(1, 2, 0).numpy()
+            loss = -criterion(output, img_gt).cpu().detach().numpy()
+            out['loss'] = loss
+            out['init_loss'] = -criterion(img_lq, img_gt).cpu().detach().numpy()
+    return out
 
 if __name__ == '__main__':
-    model_dir = "./models/NAFNet_Width32"
-    log_dir = "./logs/NAFNet_Width32"
+    model_dir = "NAFNet_Width32_BestModel"
 
-
-    BATCH_SIZE = 1
-    N_ITERATIONS = 200000
     CROP_SIZE = 256
-
-    root_lq = os.path.join(os.getcwd(), 'datasets', 'SIDD', 'train', 'input_crops.lmdb')
-    root_gt = os.path.join(os.getcwd(), 'datasets', 'SIDD', 'train', 'gt_crops.lmdb')
-    train_dataset_params = {'root_lq': root_lq, 'root_gt': root_gt, 'gt_size': CROP_SIZE, 'batch_size': BATCH_SIZE}
-    train_dataset = PairedImageDataset(train_dataset_params['root_lq'],
-                                       train_dataset_params['root_gt'],
-                                       0,
-                                       {'phase': 'validation', 'gt_size': train_dataset_params['gt_size']}
-                                       )
+    BATCH_SIZE=1
 
     root_lq = os.path.join(os.getcwd(), 'datasets', 'SIDD', 'val', 'input_crops.lmdb')
     root_gt = os.path.join(os.getcwd(), 'datasets', 'SIDD', 'val', 'gt_crops.lmdb')
@@ -40,8 +51,6 @@ if __name__ == '__main__':
                                        0,
                                        {'phase': 'validation', 'gt_size': val_dataset_params['gt_size']}
                                        )
-    N_BATCHES = len(train_dataset) // BATCH_SIZE
-    N_EPOCHS = N_ITERATIONS // N_BATCHES + 1
 
     net_params = {'in_channels': 3,
                   'width': 32,
@@ -52,46 +61,37 @@ if __name__ == '__main__':
                   'middle_blocks': 12
                   }
 
-    optimizer_params = {'lr': 1e-3, 'betas': (0.9, 0.9), 'weight_decay': 0}
-    scheduler_params = {'T_max': N_ITERATIONS, 'eta_min': 1e-7} # 1e-6 --> 1e-7
-
     model = NAFNet(**net_params)
+    model.load_state_dict(torch.load(model_dir, map_location='cpu')['state_dict'])
     criterion = PSNRLoss(data_range=1.0)
-    optimizer = torch.optim.AdamW(model.parameters(), **optimizer_params) # Adam --> AdamW
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, **scheduler_params)
 
-    trainer = Trainer(model,
-                      criterion,
-                      optimizer,
-                      scheduler,
-                      train_dataset_params,
-                      val_dataset_params,
-                      1,
-                      1,
-                      N_ITERATIONS,
-                      model_dir,
-                      log_dir)
-
-    resume = False
-    if os.path.exists(model_dir) and len(os.listdir(model_dir)) > 0:
-        for filename in os.listdir(model_dir):
-            if filename.endswith(".pth"):
-                resume = True
-    # print(val_dataset[0]['lq'].shape)
-    # raise
     val_loader = DataLoader(val_dataset,
-                                batch_size=BATCH_SIZE,
-                                shuffle=False,
-                                num_workers=6
-                                )
-    out = trainer.epoch_test(N_EPOCHS, val_loader)
-    fig, axes = plt.subplots(1, 3, figsize=(10, 5))
+                            batch_size=BATCH_SIZE,
+                            shuffle=False,
+                            num_workers=6
+                            )
 
-    axes[0].imshow(out['gt'])
-    axes[0].axis('off')  # Optional: turn off axes if you don't need them
-    axes[1].imshow(out['lq'])
-    axes[1].axis('off')
-    axes[2].imshow(out['dn'])
-    axes[2].axis('off')
-    plt.savefig('side_by_side_images.png')
-    # trainer.train_loop(2, True)
+    save_indices = [0, 10, 20, 50, 100, 500]
+    count = 0
+    running_loss = []
+    for data in val_loader:
+        img_gt, img_lq = data['gt'], data['lq']
+        out = test_image(model, criterion, img_lq, img_gt)
+        running_loss.append(out['loss'])
+        if count in save_indices:
+            fig, axes = plt.subplots(1, 3, figsize=(10, 5))
+            axes[0].imshow(out['gt'])
+            axes[0].axis('off')
+            axes[0].set_title('Ground Truth')
+            axes[1].imshow(out['lq'])
+            axes[1].axis('off')
+            axes[1].set_title(f'Noisy Image: {round(out['init_loss'], 2):.2f} dB')
+            axes[2].imshow(out['dn'])
+            axes[2].axis('off')
+            axes[2].set_title(f'Denoised Image: {round(out['loss'], 2):.2f} dB')
+            plt.savefig(data['lq_path'][0] + str('.png'))
+            plt.close()
+
+        count += 1
+
+    print(np.mean(running_loss).round(2))
