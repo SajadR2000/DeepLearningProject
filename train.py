@@ -3,7 +3,7 @@ import numpy as np
 import os
 from data import PairedImageDataset
 from torch.utils.data import DataLoader
-from modules import Baseline
+from modules import Baseline, NAFNet
 from utils import PSNRLoss
 from tqdm import tqdm
 import json
@@ -96,13 +96,13 @@ class Trainer:
         train_loader = DataLoader(train_dataset,
                                   batch_size=self.train_dataset_params['batch_size'],
                                   shuffle=False,
-                                  num_workers=4
+                                  num_workers=6
                                   )
 
         val_loader = DataLoader(val_dataset,
                                 batch_size=self.val_dataset_params['batch_size'],
                                 shuffle=False,
-                                num_workers=4
+                                num_workers=6
                                 )
 
         return train_loader, val_loader
@@ -121,7 +121,7 @@ class Trainer:
             output = self.model(img_lq)
             loss = self.criterion(output, img_gt)
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.01)
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 0.01)  # Gradient Clipping
             self.optimizer.step()
             self.scheduler.step()
             running_loss.append(loss.cpu().detach().numpy())
@@ -153,12 +153,31 @@ class Trainer:
             epoch_loss = str(np.mean(running_loss).item())
             self.loss_vals["val"].append(epoch_loss)
             self.loss_vals["val_epochs"].append(epoch)
+    def epoch_test(self, epoch, val_loader):
+        self.load_model()
+        if epoch % self.val_freq == 0:
+            t_start = time()
+            self.model.eval()
+            running_loss = []
+            with torch.no_grad():
+                for data in val_loader:
+                    img_lq, img_gt = data['lq'].to(self.device), data['gt'].to(self.device)
+                    output = self.model(img_lq)
+                    loss = self.criterion(output, img_gt)
+                    running_loss.append(loss.cpu().detach().numpy())
+                    if(len(running_loss)>15):
+                        break
+            out = {}
+            out['gt'] = img_gt.cpu().squeeze().permute(1, 2, 0).numpy()
+            out['lq'] = img_lq.cpu().squeeze().permute(1, 2, 0).numpy()
+            out['dn'] = output.cpu().squeeze().permute(1, 2, 0).numpy()
+            return out
 
     def load_model(self):
         filename = sorted(os.listdir(self.model_dir))[-1]
         print(f"Loading model {filename}")
         file_dir = os.path.join(self.model_dir, filename)
-        checkpoint = torch.load(file_dir)
+        checkpoint = torch.load(file_dir, map_location=self.device)
         self.model.load_state_dict(checkpoint['state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer'])
         self.scheduler.load_state_dict(checkpoint['scheduler'])
