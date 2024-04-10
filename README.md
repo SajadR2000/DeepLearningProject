@@ -7,6 +7,16 @@ The official repository of the paper:
 
 https://github.com/megvii-research/NAFNet/tree/main
 
+## Results
+
+The following table depicts our results on replicating the experiment of using NAFNet with width 32 for image denoising on SIDD dataset. 
+
+| Implementation | PSNR on SIDD
+|-----------------|-----------------|
+| Paper  | 39.96  |
+| Ours (first attempt)  | 39.09  |
+| Ours (third attempt) | 39.99  |
+
 ## Data Preparation
 
 1. Crop SIDD dataset images to patches of size 512*512 using sidd.py from the paper repo,
