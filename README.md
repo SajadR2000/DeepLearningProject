@@ -44,3 +44,7 @@ To test NAFNet model simply run test_nafnet.py
 
 ## Instruction Summary:
 You can follow the instruction.txt file for a detailed set of instructions on preparing the data and training. However, before running it make sure to copy the basicsr directory from the paper repo into this directory.
+
+## Note
+
+We uploaded the debugged version of our code as "Changed code.zip". That version produced the expected results (third attempt in the above table). We put it separately, because we had slighty used the paper repo. Please refer to our report for more information.
